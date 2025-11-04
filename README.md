@@ -35,4 +35,16 @@ switch:
 
 ## esphome
 * Temperatur
-*# esphome-sgready
+
+# Rules
+
+* Minumum between change 10 minutes
+  * VERY LOW
+    * Allow orderd mode (Fall through to NORMAL_OPERATION)
+  * LOW
+    * Allow encourage mode (Fall through to NORMAL_OPERATION)
+  * NORMAL
+  * HIGH
+    * \< 3 times BLOCKED_OPERATION (Fall through to NORMAL_OPERATION)
+    * \< 2 hours BLOCKED_OPERATION (Fall through to NORMAL_OPERATION)
+    * \> minimum temperature (Fall through to NORMAL_OPERATION)

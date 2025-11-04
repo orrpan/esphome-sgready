@@ -4,6 +4,9 @@
 #include "esphome/core/hal.h"
 #include "esphome/components/switch/switch.h"
 #include "esphome/components/sensor/sensor.h"
+#include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
+#include <ctime> // added for time()/localtime_r()
 
 namespace esphome
 {
@@ -12,19 +15,53 @@ namespace esphome
 
     enum class SGReadyMode : uint8_t
     {
-      MODE_1 = 0b10, // pin_a=1, pin_b=0, Mode 1 – Blocked operation
-      MODE_2 = 0b00, // pin_a=0, pin_b=0, Mode 2 – Normal operation
-      MODE_3 = 0b01, // pin_a=0, pin_b=1, Mode 3 – Encouraged operation
-      MODE_4 = 0b11, // pin_a=1, pin_b=1, Mode 4 – Ordered operation
+      BLOCKED_OPERATION = 0b10,    // pin_a=1, pin_b=0, Mode 1 – Blocked operation
+      NORMAL_OPERATION = 0b00,     // pin_a=0, pin_b=0, Mode 2 – Normal operation
+      ENCOURAGED_OPERATION = 0b01, // pin_a=0, pin_b=1, Mode 3 – Encouraged operation
+      ORDERED_OPERATION = 0b11,    // pin_a=1, pin_b=1, Mode 4 – Ordered operation
     };
+
+    inline const char *to_string(SGReadyMode mode)
+    {
+      switch (mode)
+      {
+      case SGReadyMode::BLOCKED_OPERATION:
+        return "Blocked operation (1)";
+      case SGReadyMode::NORMAL_OPERATION:
+        return "Normal operation (2)";
+      case SGReadyMode::ENCOURAGED_OPERATION:
+        return "Encouraged operation (3)";
+      case SGReadyMode::ORDERED_OPERATION:
+        return "Ordered operation (4)";
+      default:
+        return "UNKNOWN";
+      }
+    }
 
     enum class PriceLevel : int8_t
     {
-      PRICE_LEVEL_VERY_LOW = 1, // MODE 4
-      PRICE_LEVEL_LOW = 2,      // MODE 3
-      PRICE_LEVEL_MEDIUM = 3,   // MODE 2
-      PRICE_LEVEL_HIGH = 4,     // MODE 1
+      PRICE_LEVEL_VERY_LOW = 1,
+      PRICE_LEVEL_LOW = 2,
+      PRICE_LEVEL_NORMAL = 3,
+      PRICE_LEVEL_HIGH = 4,
     };
+
+    inline const char *to_string(PriceLevel level)
+    {
+      switch (level)
+      {
+      case PriceLevel::PRICE_LEVEL_VERY_LOW:
+        return "Very Low";
+      case PriceLevel::PRICE_LEVEL_LOW:
+        return "Low";
+      case PriceLevel::PRICE_LEVEL_NORMAL:
+        return "Normal";
+      case PriceLevel::PRICE_LEVEL_HIGH:
+        return "High";
+      default:
+        return "UNKNOWN";
+      }
+    }
 
     class SGReadyComponent : public switch_::Switch, public Component
     {
@@ -34,10 +71,10 @@ namespace esphome
       void dump_config() override;
       void setup() override;
 
-      SGReadyMode get_next_mode(PriceLevel price_level);
-      bool get_can_use_blocked_mode();
+      SGReadyMode get_next_mode(PriceLevel price_level, SGReadyMode current_mode, unsigned long last_change);
+      bool get_can_use_blocked_mode(SGReadyMode current_mode, unsigned long last_change);
 
-      void set_mode(SGReadyMode mode);
+      SGReadyMode set_mode(SGReadyMode mode);
       void set_minimum_operating_temperature(float temperature_celsius);
       void set_output_pin(GPIOPin *pin_a, GPIOPin *pin_b)
       {
@@ -50,6 +87,7 @@ namespace esphome
 
       void set_temperature_sensor(esphome::sensor::Sensor *sensor);
       void set_price_level_sensor(esphome::sensor::Sensor *sensor);
+      void set_mode_text_sensor(esphome::text_sensor::TextSensor *t);
 
       // void set_price_level(PriceLevel price_level);
 
@@ -58,18 +96,25 @@ namespace esphome
 
       void register_switch(switch_::Switch *sw);
       void write_state(bool state) override;
+      void set_pin_a_binary(esphome::binary_sensor::BinarySensor *b);
+      void set_pin_b_binary(esphome::binary_sensor::BinarySensor *b);
 
     protected:
       GPIOPin *pin_a_, *pin_b_;
+      esphome::binary_sensor::BinarySensor *pin_a_binary_{nullptr};
+      esphome::binary_sensor::BinarySensor *pin_b_binary_{nullptr};
+      esphome::text_sensor::TextSensor *mode_text_sensor_{nullptr};
+      unsigned long last_mode_change_ms_{0};
 
       float last_temperature_{NAN};
       esphome::sensor::Sensor *temperature_sensor_{nullptr};
 
-      PriceLevel current_price_level_{PriceLevel::PRICE_LEVEL_MEDIUM};
+      PriceLevel current_price_level_{PriceLevel::PRICE_LEVEL_NORMAL};
       PriceLevel last_price_level_;
       esphome::sensor::Sensor *price_level_sensor_{nullptr};
 
-      switch_::Switch *allow_ordered_mode_ = nullptr, *allow_encouraged_mode_ = nullptr;
+      esphome::switch_::Switch *allow_ordered_mode_{nullptr};
+      esphome::switch_::Switch *allow_encouraged_mode_{nullptr};
     };
 
   } // namespace sgready_component
