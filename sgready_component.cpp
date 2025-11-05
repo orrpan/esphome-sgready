@@ -17,6 +17,7 @@ namespace esphome
             constexpr int kAllowedBlockedTimeMax = 120;                      // minutes
             constexpr unsigned long kMinModeChangeMs = 10UL * 60UL * 1000UL; // 10 minutes
             constexpr unsigned long kMaxBlockedModeMs = static_cast<unsigned long>(kAllowedBlockedTimeMax) * 60UL * 1000UL;
+            constexpr unsigned long kMinBlockedModeMs = static_cast<unsigned long>(kAllowedBlockedTimeMin) * 60UL * 1000UL;
 
             // runtime state that is internal to this translation unit
             static unsigned long last_mode_change_ms = 0;
@@ -74,11 +75,11 @@ namespace esphome
                     last_midnight_day = today;
                 }
 
-                // scheduled triggers at minutes 1,16,31,46
                 int minute = local_tm.tm_min;
                 int second = local_tm.tm_sec;
                 int slot = local_tm.tm_hour * 60 + minute;
-                if ((minute == 1 || minute == 16 || minute == 31 || minute == 46) && second < 5 && slot != last_triggered_slot)
+                // trigger at minutes 0,15,30,45 at exactly second 5
+                if ((minute == 0 || minute == 15 || minute == 30 || minute == 45) && second == 5 && slot != last_triggered_slot)
                 {
                     last_triggered_slot = slot;
                     ESP_LOGI(TAG, "Scheduled tick %02d:%02d -> update()", local_tm.tm_hour, minute);
@@ -100,7 +101,6 @@ namespace esphome
                 ESP_LOGW(TAG, "Pins not configured; skipping update");
                 return;
             }
-
             unsigned long now = millis();
             unsigned long last_change = now - last_mode_change_ms;
 
@@ -112,7 +112,7 @@ namespace esphome
                 return;
             }
 
-            // prevent rapid mode toggles: enforce minimum time between changes
+            // prevent rapid mode toggles : enforce minimum time between changes
             if (now != 0 && last_change < kMinModeChangeMs)
             {
                 ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", to_string(next_mode), kMinModeChangeMs - last_change);
@@ -122,6 +122,16 @@ namespace esphome
             // track blocked usage counters
             if (current_mode == SGReadyMode::BLOCKED_OPERATION && next_mode != SGReadyMode::BLOCKED_OPERATION)
             {
+                if (last_change >= kMinBlockedModeMs)
+                {
+                    ESP_LOGI(TAG, "Blocked session lasted %lu ms", last_change);
+                }
+                else
+                {
+                    ESP_LOGW(TAG, "Blocked session too short (%lu ms); not counting towards daily limit", last_change);
+                    // do not count this towards the daily limit
+                    next_mode = SGReadyMode::BLOCKED_OPERATION;
+                }
                 used_blocked_times_today++;
                 ESP_LOGI(TAG, "Blocked session ended; used_blocked_times_today=%d", used_blocked_times_today);
             }
@@ -147,8 +157,10 @@ namespace esphome
             case PriceLevel::PRICE_LEVEL_NORMAL:
                 return SGReadyMode::NORMAL_OPERATION;
             case PriceLevel::PRICE_LEVEL_HIGH:
-            default:
                 return get_can_use_blocked_mode(cur_mode, last_change) ? SGReadyMode::BLOCKED_OPERATION : SGReadyMode::NORMAL_OPERATION;
+            default:
+                ESP_LOGW(TAG, "Unknown price level %d; defaulting to NORMAL_OPERATION", static_cast<int>(price_level));
+                return SGReadyMode::NORMAL_OPERATION;
             }
         }
 

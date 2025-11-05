@@ -25,10 +25,10 @@ namespace esphome
     {
       switch (mode)
       {
-      case SGReadyMode::BLOCKED_OPERATION:
-        return "Blocked operation (1)";
       case SGReadyMode::NORMAL_OPERATION:
         return "Normal operation (2)";
+      case SGReadyMode::BLOCKED_OPERATION:
+        return "Blocked operation (1)";
       case SGReadyMode::ENCOURAGED_OPERATION:
         return "Encouraged operation (3)";
       case SGReadyMode::ORDERED_OPERATION:
