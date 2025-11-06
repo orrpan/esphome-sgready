@@ -1,0 +1,98 @@
+esphome:
+  name: devliv
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: "asfasfasfasfasfasfas"
+
+ota:
+  - platform: esphome
+    password: "asfasfasfasfasfasfas"
+
+# Example configuration entry
+web_server:
+  port: 80
+
+wifi:
+  ssid: ""
+  password: ""
+  use_address: 192.168.1.4
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Devliv Fallback Hotspot"
+    password: "rgagaegaeaegg"
+
+captive_portal:
+
+external_components:
+  - source:
+      type: local
+      path: external_components
+    components:
+      - sgready_component
+    refresh: always
+
+sensor:
+  - platform: homeassistant
+    name: "Electricity price level from Home Assistant"
+    entity_id: sensor.electricity_price_level
+    id: electricity_price_level
+    accuracy_decimals: 0
+  - platform: homeassistant
+    name: "Temp"
+    entity_id: sensor.esp32_sg_ready_bt_proxy_ce2d2c_temperatur
+    id: testtemp2
+    accuracy_decimals: 1
+
+sgready_component:
+  id: sgready_component_1
+  sgready_a: 27
+  sgready_b: 26
+  temperature_sensor: testtemp2
+  price_level_sensor: electricity_price_level
+  pin_a_binary_sensor: sg_pin_a_bin # link binary sensor for pin A
+  pin_b_binary_sensor: sg_pin_b_bin # link binary sensor for pin B
+  mode_text_sensor: sg_mode_text_sensor
+
+time:
+  - platform: sntp
+    id: sntp_time
+
+switch:
+  - platform: sgready_component
+    name: "SGReady Ordered"
+    id: block_ordered_mode
+    sgready_component_id: sgready_component_1
+
+  - platform: sgready_component
+    name: "SGReady Encouraged"
+    id: block_encourage_mode
+    sgready_component_id: sgready_component_1
+
+  - platform: sgready_component
+    name: "SGReady Enabled"
+    id: sg_sgready_enabled
+    sgready_component_id: sgready_component_1
+
+binary_sensor:
+  - platform: template
+    name: "SGReady Pin A"
+    id: sg_pin_a_bin
+
+  - platform: template
+    name: "SGReady Pin B"
+    id: sg_pin_b_bin
+
+text_sensor:
+  - platform: template
+    name: "Current SGReadyMode"
+    id: sg_mode_text_sensor
