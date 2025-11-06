@@ -47,6 +47,11 @@ namespace esphome
                 this->pin_a_binary_->publish_state(static_cast<bool>(this->pin_a_->digital_read()));
             if (this->pin_b_binary_ && this->pin_b_)
                 this->pin_b_binary_->publish_state(static_cast<bool>(this->pin_b_->digital_read()));
+
+            if (this->sgready_enabled_)
+            {
+                this->sgready_enabled_->publish_state(true);
+            }
         }
 
         // run periodic tasks: midnight reset + scheduled updates
@@ -232,6 +237,12 @@ namespace esphome
             {
                 this->set_allow_encouraged_mode(sw);
                 ESP_LOGI(TAG, "registered encouraged switch %s", sw->get_name().c_str());
+                return;
+            }
+            if (!this->sgready_enabled_)
+            {
+                this->set_sgready_enabled(sw);
+                ESP_LOGI(TAG, "registered sgready_enabled switch %s", sw->get_name().c_str());
                 return;
             }
             ESP_LOGW(TAG, "extra child switch ignored: %s", sw->get_name().c_str());
