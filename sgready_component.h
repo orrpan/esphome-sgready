@@ -12,56 +12,63 @@ namespace esphome
 {
   namespace sgready_component
   {
-
-    enum class SGReadyMode : uint8_t
+    enum class SGReadyMode : int8_t
     {
-      BLOCKED_OPERATION = 0b10,    // pin_a=1, pin_b=0, Mode 1 – Blocked operation
-      NORMAL_OPERATION = 0b00,     // pin_a=0, pin_b=0, Mode 2 – Normal operation
-      ENCOURAGED_OPERATION = 0b01, // pin_a=0, pin_b=1, Mode 3 – Encouraged operation
-      ORDERED_OPERATION = 0b11,    // pin_a=1, pin_b=1, Mode 4 – Ordered operation
+      UNKNOWN_OPERAION = 0,     // undefined state
+      BLOCKED_OPERATION = 1,    // pin_a=1, pin_b=0, Mode 1 – Blocked operation
+      NORMAL_OPERATION = 2,     // pin_a=0, pin_b=0, Mode 2 – Normal operation
+      ENCOURAGED_OPERATION = 3, // pin_a=0, pin_b=1, Mode 3 – Encouraged operation
+      ORDERED_OPERATION = 4,    // pin_a=1, pin_b=1, Mode 4 – Ordered operation
+    };
+    struct sgready_mode
+    {
+      SGReadyMode mode;
+      const char *description;
+      bool pin_a;
+      bool pin_b;
     };
 
-    inline const char *to_string(SGReadyMode mode)
-    {
-      switch (mode)
-      {
-      case SGReadyMode::NORMAL_OPERATION:
-        return "Normal operation (2)";
-      case SGReadyMode::BLOCKED_OPERATION:
-        return "Blocked operation (1)";
-      case SGReadyMode::ENCOURAGED_OPERATION:
-        return "Encouraged operation (3)";
-      case SGReadyMode::ORDERED_OPERATION:
-        return "Ordered operation (4)";
-      default:
-        return "UNKNOWN";
-      }
-    }
+    // inline const char *to_string(SGReadyMode mode)
+    // {
+    //   switch (mode)
+    //   {
+    //   case SGReadyMode::NORMAL_OPERATION:
+    //     return "Normal operation (2)";
+    //   case SGReadyMode::BLOCKED_OPERATION:
+    //     return "Blocked operation (1)";
+    //   case SGReadyMode::ENCOURAGED_OPERATION:
+    //     return "Encouraged operation (3)";
+    //   case SGReadyMode::ORDERED_OPERATION:
+    //     return "Ordered operation (4)";
+    //   default:
+    //     return "UNKNOWN";
+    //   }
+    // }
 
     enum class PriceLevel : int8_t
     {
+      PRICE_UNKNOWN = 0,
       PRICE_LEVEL_VERY_LOW = 1,
       PRICE_LEVEL_LOW = 2,
       PRICE_LEVEL_NORMAL = 3,
       PRICE_LEVEL_HIGH = 4,
     };
 
-    inline const char *to_string(PriceLevel level)
-    {
-      switch (level)
-      {
-      case PriceLevel::PRICE_LEVEL_VERY_LOW:
-        return "Very Low";
-      case PriceLevel::PRICE_LEVEL_LOW:
-        return "Low";
-      case PriceLevel::PRICE_LEVEL_NORMAL:
-        return "Normal";
-      case PriceLevel::PRICE_LEVEL_HIGH:
-        return "High";
-      default:
-        return "UNKNOWN";
-      }
-    }
+    // inline const char *to_string(PriceLevel level)
+    // {
+    //   switch (level)
+    //   {
+    //   case PriceLevel::PRICE_LEVEL_VERY_LOW:
+    //     return "Very Low";
+    //   case PriceLevel::PRICE_LEVEL_LOW:
+    //     return "Low";
+    //   case PriceLevel::PRICE_LEVEL_NORMAL:
+    //     return "Normal";
+    //   case PriceLevel::PRICE_LEVEL_HIGH:
+    //     return "High";
+    //   default:
+    //     return "UNKNOWN";
+    //   }
 
     class SGReadyComponent : public switch_::Switch, public Component
     {
@@ -75,6 +82,7 @@ namespace esphome
       bool get_can_use_blocked_mode(SGReadyMode current_mode, unsigned long last_change);
 
       SGReadyMode set_mode(SGReadyMode mode);
+
       void set_minimum_operating_temperature(float temperature_celsius);
       void set_output_pin(GPIOPin *pin_a, GPIOPin *pin_b)
       {

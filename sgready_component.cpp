@@ -27,6 +27,20 @@ namespace esphome
 
             float minimum_temperature_celsius = 17.0;
             SGReadyMode current_mode = SGReadyMode::NORMAL_OPERATION;
+
+            sgready_mode mode_data[] = {
+                {SGReadyMode::UNKNOWN_OPERAION, "Unknown operation", 0, 0},
+                {SGReadyMode::BLOCKED_OPERATION, "Blocked operation", 1, 0},
+                {SGReadyMode::NORMAL_OPERATION, "Normal operation", 0, 0},
+                {SGReadyMode::ENCOURAGED_OPERATION, "Encouraged operation", 0, 1},
+                {SGReadyMode::ORDERED_OPERATION, "Ordered operation", 1, 1},
+            };
+
+            static const char *mode_description(SGReadyMode mode)
+            {
+                const sgready_mode *md = &mode_data[static_cast<int>(mode)];
+                return md->description;
+            }
         }
 
         // ---------- lifecycle ----------
@@ -121,7 +135,7 @@ namespace esphome
             // prevent rapid mode toggles : enforce minimum time between changes
             if (now != 0 && ms_since_last_change < (kMinModeChangeMs - 1000UL))
             {
-                ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", to_string(next_mode), kMinModeChangeMs - ms_since_last_change);
+                ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", mode_description(next_mode), kMinModeChangeMs - ms_since_last_change);
                 return;
             }
 
@@ -142,11 +156,11 @@ namespace esphome
             }
             else if (next_mode == current_mode)
             {
-                ESP_LOGD(TAG, "Mode unchanged (%s)", to_string(current_mode));
+                ESP_LOGD(TAG, "Mode unchanged (%s)", mode_description(current_mode));
                 return;
             }
 
-            ESP_LOGI(TAG, "Changing mode %s -> %s", to_string(current_mode), to_string(next_mode));
+            ESP_LOGI(TAG, "Changing mode %s -> %s", mode_description(current_mode), mode_description(next_mode));
             current_mode = this->set_mode(next_mode);
             last_mode_change_ms = now;
         }
@@ -197,22 +211,21 @@ namespace esphome
         // ---------- setters / helpers ----------
         SGReadyMode SGReadyComponent::set_mode(SGReadyMode mode)
         {
-            bool new_a = static_cast<bool>(static_cast<int>(mode) >> 1);
-            bool new_b = static_cast<bool>(static_cast<int>(mode) & 0b01);
+            const sgready_mode *md = &mode_data[static_cast<int>(mode)];
 
-            ESP_LOGI(TAG, "set_mode %s (a=%d b=%d)", to_string(mode), new_a, new_b);
+            ESP_LOGI(TAG, "set_mode %s (a=%d b=%d)", md->description, md->pin_a, md->pin_b);
 
             if (this->pin_a_)
-                this->pin_a_->digital_write(new_a);
+                this->pin_a_->digital_write(md->pin_a);
             if (this->pin_b_)
-                this->pin_b_->digital_write(new_b);
+                this->pin_b_->digital_write(md->pin_b);
 
             if (this->pin_a_binary_)
-                this->pin_a_binary_->publish_state(new_a);
+                this->pin_a_binary_->publish_state(md->pin_a);
             if (this->pin_b_binary_)
-                this->pin_b_binary_->publish_state(new_b);
+                this->pin_b_binary_->publish_state(md->pin_b);
             if (this->mode_text_sensor_)
-                this->mode_text_sensor_->publish_state(std::string(to_string(mode)));
+                this->mode_text_sensor_->publish_state(std::string(md->description));
 
             return mode;
         }
@@ -269,7 +282,7 @@ namespace esphome
         {
             this->mode_text_sensor_ = t;
             if (t)
-                t->publish_state(std::string(to_string(current_mode)));
+                t->publish_state(std::string(mode_description(current_mode)));
         }
 
         void SGReadyComponent::set_temperature_sensor(esphome::sensor::Sensor *sensor)
@@ -298,7 +311,7 @@ namespace esphome
             ESP_LOGCONFIG(TAG, "SGReady component:");
             LOG_PIN("  Pin A: ", this->pin_a_);
             LOG_PIN("  Pin B: ", this->pin_b_);
-            ESP_LOGCONFIG(TAG, "  Mode: %s", to_string(current_mode));
+            ESP_LOGCONFIG(TAG, "  Mode: %s", mode_description(current_mode));
             ESP_LOGCONFIG(TAG, "  Used blocked times today: %d", used_blocked_times_today);
             if (this->allow_ordered_mode_)
                 ESP_LOGCONFIG(TAG, "  Ordered switch: %s", this->allow_ordered_mode_->get_name().c_str());
