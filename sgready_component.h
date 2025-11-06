@@ -84,6 +84,7 @@ namespace esphome
 
       void set_allow_ordered_mode(switch_::Switch *s);
       void set_allow_encouraged_mode(switch_::Switch *s);
+      void set_sgready_enabled(switch_::Switch *s);
 
       void set_temperature_sensor(esphome::sensor::Sensor *sensor);
       void set_price_level_sensor(esphome::sensor::Sensor *sensor);
@@ -91,8 +92,8 @@ namespace esphome
 
       // void set_price_level(PriceLevel price_level);
 
-      switch_::Switch *get_allow_ordered_mode() const;
-      switch_::Switch *get_allow_encouraged_mode() const;
+      // switch_::Switch *get_allow_ordered_mode() const;
+      // switch_::Switch *get_allow_encouraged_mode() const;
 
       void register_switch(switch_::Switch *sw);
       void write_state(bool state) override;
@@ -115,6 +116,7 @@ namespace esphome
 
       esphome::switch_::Switch *allow_ordered_mode_{nullptr};
       esphome::switch_::Switch *allow_encouraged_mode_{nullptr};
+      esphome::switch_::Switch *sgready_enabled_{nullptr};
     };
 
   } // namespace sgready_component

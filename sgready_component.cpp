@@ -34,6 +34,7 @@ namespace esphome
         {
             ESP_LOGCONFIG(TAG, "SGReady setup");
             last_mode_change_ms = millis();
+            // this->sgready_enabled_->state = true; // default to enabled
             if (this->pin_a_)
                 this->pin_a_->setup();
             if (this->pin_b_)
@@ -78,8 +79,8 @@ namespace esphome
                 int minute = local_tm.tm_min;
                 int second = local_tm.tm_sec;
                 int slot = local_tm.tm_hour * 60 + minute;
-                // trigger at minutes 0,15,30,45 at exactly second 5
-                if ((minute == 0 || minute == 15 || minute == 30 || minute == 45) && second == 5 && slot != last_triggered_slot)
+                // trigger at minutes 0, 10, 20, 30, 40, 50 at exactly second 5
+                if (minute % 10 == 0 && second == 5 && slot != last_triggered_slot)
                 {
                     last_triggered_slot = slot;
                     ESP_LOGI(TAG, "Scheduled tick %02d:%02d -> update()", local_tm.tm_hour, minute);
@@ -94,6 +95,12 @@ namespace esphome
         // ---------- core logic ----------
         void SGReadyComponent::update(PriceLevel price_level, float temperature_sensor_value)
         {
+            if (this->sgready_enabled_ && !this->sgready_enabled_->state)
+            {
+                ESP_LOGI(TAG, "SGReady disabled via control switch; setting NORMAL_OPERATION");
+                current_mode = this->set_mode(SGReadyMode::NORMAL_OPERATION);
+                return;
+            }
             ESP_LOGD(TAG, "update(price=%d, temp=%.2f)", static_cast<int>(price_level), temperature_sensor_value);
 
             if (!this->pin_a_ || !this->pin_b_)
@@ -102,38 +109,36 @@ namespace esphome
                 return;
             }
             unsigned long now = millis();
-            unsigned long last_change = now - last_mode_change_ms;
+            unsigned long ms_since_last_change = now - last_mode_change_ms;
 
-            SGReadyMode next_mode = this->get_next_mode(price_level, current_mode, last_change);
-
-            if (next_mode == current_mode)
-            {
-                ESP_LOGD(TAG, "Mode unchanged (%s)", to_string(current_mode));
-                return;
-            }
+            SGReadyMode next_mode = this->get_next_mode(price_level, current_mode, ms_since_last_change);
 
             // prevent rapid mode toggles : enforce minimum time between changes
-            if (now != 0 && last_change < kMinModeChangeMs)
+            if (now != 0 && ms_since_last_change < (kMinModeChangeMs - 1000UL))
             {
-                ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", to_string(next_mode), kMinModeChangeMs - last_change);
+                ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", to_string(next_mode), kMinModeChangeMs - ms_since_last_change);
                 return;
             }
 
             // track blocked usage counters
             if (current_mode == SGReadyMode::BLOCKED_OPERATION && next_mode != SGReadyMode::BLOCKED_OPERATION)
             {
-                if (last_change >= kMinBlockedModeMs)
+                if (ms_since_last_change >= kMinBlockedModeMs)
                 {
-                    ESP_LOGI(TAG, "Blocked session lasted %lu ms", last_change);
+                    used_blocked_times_today++;
+                    ESP_LOGI(TAG, "Blocked session ended and lasted %lu ms, blocked %d times today", ms_since_last_change, used_blocked_times_today);
                 }
                 else
                 {
-                    ESP_LOGW(TAG, "Blocked session too short (%lu ms); not counting towards daily limit", last_change);
+                    ESP_LOGW(TAG, "Blocked session too short (%lu ms); not counting towards daily limit", ms_since_last_change);
                     // do not count this towards the daily limit
                     next_mode = SGReadyMode::BLOCKED_OPERATION;
                 }
-                used_blocked_times_today++;
-                ESP_LOGI(TAG, "Blocked session ended; used_blocked_times_today=%d", used_blocked_times_today);
+            }
+            else if (next_mode == current_mode)
+            {
+                ESP_LOGD(TAG, "Mode unchanged (%s)", to_string(current_mode));
+                return;
             }
 
             ESP_LOGI(TAG, "Changing mode %s -> %s", to_string(current_mode), to_string(next_mode));
@@ -232,15 +237,9 @@ namespace esphome
             ESP_LOGW(TAG, "extra child switch ignored: %s", sw->get_name().c_str());
         }
 
-        void SGReadyComponent::set_allow_ordered_mode(switch_::Switch *s)
-        {
-            this->allow_ordered_mode_ = s;
-        }
-
-        void SGReadyComponent::set_allow_encouraged_mode(switch_::Switch *s)
-        {
-            this->allow_encouraged_mode_ = s;
-        }
+        void SGReadyComponent::set_allow_ordered_mode(switch_::Switch *s) { this->allow_ordered_mode_ = s; }
+        void SGReadyComponent::set_allow_encouraged_mode(switch_::Switch *s) { this->allow_encouraged_mode_ = s; }
+        void SGReadyComponent::set_sgready_enabled(switch_::Switch *s) { this->sgready_enabled_ = s; }
 
         void SGReadyComponent::set_pin_a_binary(esphome::binary_sensor::BinarySensor *b)
         {
@@ -268,9 +267,7 @@ namespace esphome
             if (!sensor)
                 return;
             sensor->add_on_state_callback([this](float v)
-                                          {
-        this->last_temperature_ = v;
-        this->update(this->current_price_level_, this->last_temperature_); });
+                                          { this->last_temperature_ = v; });
         }
 
         void SGReadyComponent::set_price_level_sensor(esphome::sensor::Sensor *sensor)
@@ -296,6 +293,8 @@ namespace esphome
                 ESP_LOGCONFIG(TAG, "  Ordered switch: %s", this->allow_ordered_mode_->get_name().c_str());
             if (this->allow_encouraged_mode_)
                 ESP_LOGCONFIG(TAG, "  Encouraged switch: %s", this->allow_encouraged_mode_->get_name().c_str());
+            if (this->sgready_enabled_)
+                ESP_LOGCONFIG(TAG, "  SGReady enabled switch: %s", this->sgready_enabled_->get_name().c_str());
         }
 
     } // namespace sgready_component
