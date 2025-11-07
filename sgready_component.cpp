@@ -98,8 +98,8 @@ namespace esphome
                 int minute = local_tm.tm_min;
                 int second = local_tm.tm_sec;
                 int slot = local_tm.tm_hour * 60 + minute;
-                // trigger at minutes 0, 10, 20, 30, 40, 50 at exactly second 5
-                if (minute % 10 == 0 && second == 5 && slot != last_triggered_slot)
+                // trigger at minutes 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55 at exactly second 5
+                if (minute % 5 == 0 && second == 5 && slot != last_triggered_slot)
                 {
                     last_triggered_slot = slot;
                     ESP_LOGI(TAG, "Scheduled tick %02d:%02d -> update()", local_tm.tm_hour, minute);
@@ -145,6 +145,7 @@ namespace esphome
                 if (ms_since_last_change >= kMinBlockedModeMs)
                 {
                     used_blocked_times_today++;
+
                     ESP_LOGI(TAG, "Blocked session ended and lasted %lu ms, blocked %d times today", ms_since_last_change, used_blocked_times_today);
                 }
                 else
@@ -190,14 +191,14 @@ namespace esphome
 
         bool SGReadyComponent::get_can_use_blocked_mode(SGReadyMode cur_mode, unsigned long last_change)
         {
+            if (last_change >= kMaxBlockedModeMs && cur_mode == SGReadyMode::BLOCKED_OPERATION)
+            {
+                ESP_LOGD(TAG, "blocked max duration exceeded (%lu ms)", last_change);
+                return false;
+            }
             if (used_blocked_times_today >= kAllowedBlockedTimesToday)
             {
                 ESP_LOGD(TAG, "blocked limit reached (%d)", used_blocked_times_today);
-                return false;
-            }
-            if (last_change >= kMaxBlockedModeMs)
-            {
-                ESP_LOGD(TAG, "blocked max duration exceeded (%lu ms)", last_change);
                 return false;
             }
             if (!std::isnan(last_temperature_) && last_temperature_ < minimum_temperature_celsius)
