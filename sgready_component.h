@@ -28,23 +28,6 @@ namespace esphome
       bool pin_b;
     };
 
-    // inline const char *to_string(SGReadyMode mode)
-    // {
-    //   switch (mode)
-    //   {
-    //   case SGReadyMode::NORMAL_OPERATION:
-    //     return "Normal operation (2)";
-    //   case SGReadyMode::BLOCKED_OPERATION:
-    //     return "Blocked operation (1)";
-    //   case SGReadyMode::ENCOURAGED_OPERATION:
-    //     return "Encouraged operation (3)";
-    //   case SGReadyMode::ORDERED_OPERATION:
-    //     return "Ordered operation (4)";
-    //   default:
-    //     return "UNKNOWN";
-    //   }
-    // }
-
     enum class PriceLevel : int8_t
     {
       PRICE_UNKNOWN = 0,
@@ -54,22 +37,6 @@ namespace esphome
       PRICE_LEVEL_HIGH = 4,
     };
 
-    // inline const char *to_string(PriceLevel level)
-    // {
-    //   switch (level)
-    //   {
-    //   case PriceLevel::PRICE_LEVEL_VERY_LOW:
-    //     return "Very Low";
-    //   case PriceLevel::PRICE_LEVEL_LOW:
-    //     return "Low";
-    //   case PriceLevel::PRICE_LEVEL_NORMAL:
-    //     return "Normal";
-    //   case PriceLevel::PRICE_LEVEL_HIGH:
-    //     return "High";
-    //   default:
-    //     return "UNKNOWN";
-    //   }
-
     class SGReadyComponent : public switch_::Switch, public Component
     {
     public:
@@ -78,8 +45,7 @@ namespace esphome
       void dump_config() override;
       void setup() override;
 
-      SGReadyMode get_next_mode(PriceLevel price_level, SGReadyMode current_mode, unsigned long last_change);
-      bool get_can_use_blocked_mode(SGReadyMode current_mode, unsigned long last_change);
+      SGReadyMode get_next_mode(PriceLevel price_level);
 
       SGReadyMode set_mode(SGReadyMode mode);
 
@@ -97,11 +63,6 @@ namespace esphome
       void set_temperature_sensor(esphome::sensor::Sensor *sensor);
       void set_price_level_sensor(esphome::sensor::Sensor *sensor);
       void set_mode_text_sensor(esphome::text_sensor::TextSensor *t);
-
-      // void set_price_level(PriceLevel price_level);
-
-      // switch_::Switch *get_allow_ordered_mode() const;
-      // switch_::Switch *get_allow_encouraged_mode() const;
 
       void register_switch(switch_::Switch *sw);
       void write_state(bool state) override;

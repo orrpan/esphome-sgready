@@ -130,7 +130,7 @@ namespace esphome
             unsigned long now = millis();
             unsigned long ms_since_last_change = now - last_mode_change_ms;
 
-            SGReadyMode next_mode = this->get_next_mode(price_level, current_mode, ms_since_last_change);
+            SGReadyMode next_mode = this->get_next_mode(price_level);
 
             // prevent rapid mode toggles : enforce minimum time between changes
             if (now != 0 && ms_since_last_change < (kMinModeChangeMs - 1000UL))
@@ -145,7 +145,6 @@ namespace esphome
                 if (ms_since_last_change >= kMinBlockedModeMs)
                 {
                     used_blocked_times_today++;
-
                     ESP_LOGI(TAG, "Blocked session ended and lasted %lu ms, blocked %d times today", ms_since_last_change, used_blocked_times_today);
                 }
                 else
@@ -153,6 +152,15 @@ namespace esphome
                     ESP_LOGW(TAG, "Blocked session too short (%lu ms); not counting towards daily limit", ms_since_last_change);
                     // do not count this towards the daily limit
                     next_mode = SGReadyMode::BLOCKED_OPERATION;
+                }
+            }
+            else if (current_mode == SGReadyMode::BLOCKED_OPERATION && next_mode == SGReadyMode::BLOCKED_OPERATION)
+            {
+                if (ms_since_last_change >= kMaxBlockedModeMs)
+                {
+                    used_blocked_times_today++;
+                    ESP_LOGI(TAG, "Exiting BLOCKED_OPERATION mode due to max duration reached");
+                    next_mode = SGReadyMode::NORMAL_OPERATION;
                 }
             }
             else if (next_mode == current_mode)
@@ -167,7 +175,7 @@ namespace esphome
         }
 
         // Determine next mode based on price level and availability
-        SGReadyMode SGReadyComponent::get_next_mode(PriceLevel price_level, SGReadyMode cur_mode, unsigned long last_change)
+        SGReadyMode SGReadyComponent::get_next_mode(PriceLevel price_level)
         {
             switch (price_level)
             {
@@ -182,31 +190,15 @@ namespace esphome
             case PriceLevel::PRICE_LEVEL_NORMAL:
                 return SGReadyMode::NORMAL_OPERATION;
             case PriceLevel::PRICE_LEVEL_HIGH:
-                return get_can_use_blocked_mode(cur_mode, last_change) ? SGReadyMode::BLOCKED_OPERATION : SGReadyMode::NORMAL_OPERATION;
+                if ((used_blocked_times_today < kAllowedBlockedTimesToday) &&
+                    (last_temperature_ >= minimum_temperature_celsius))
+                    return SGReadyMode::BLOCKED_OPERATION;
+                else
+                    return SGReadyMode::NORMAL_OPERATION;
             default:
                 ESP_LOGW(TAG, "Unknown price level %d; defaulting to NORMAL_OPERATION", static_cast<int>(price_level));
                 return SGReadyMode::NORMAL_OPERATION;
             }
-        }
-
-        bool SGReadyComponent::get_can_use_blocked_mode(SGReadyMode cur_mode, unsigned long last_change)
-        {
-            if (last_change >= kMaxBlockedModeMs && cur_mode == SGReadyMode::BLOCKED_OPERATION)
-            {
-                ESP_LOGD(TAG, "blocked max duration exceeded (%lu ms)", last_change);
-                return false;
-            }
-            if (used_blocked_times_today >= kAllowedBlockedTimesToday)
-            {
-                ESP_LOGD(TAG, "blocked limit reached (%d)", used_blocked_times_today);
-                return false;
-            }
-            if (!std::isnan(last_temperature_) && last_temperature_ < minimum_temperature_celsius)
-            {
-                ESP_LOGD(TAG, "temp %.2f < min %.2f", last_temperature_, minimum_temperature_celsius);
-                return false;
-            }
-            return true;
         }
 
         // ---------- setters / helpers ----------
@@ -217,9 +209,9 @@ namespace esphome
             ESP_LOGI(TAG, "set_mode %s (a=%d b=%d)", md->description, md->pin_a, md->pin_b);
 
             if (this->pin_a_)
-                this->pin_a_->digital_write(md->pin_a);
+                this->pin_a_->digital_write(!md->pin_a);
             if (this->pin_b_)
-                this->pin_b_->digital_write(md->pin_b);
+                this->pin_b_->digital_write(!md->pin_b);
 
             if (this->pin_a_binary_)
                 this->pin_a_binary_->publish_state(md->pin_a);
