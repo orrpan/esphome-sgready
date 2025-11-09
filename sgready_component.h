@@ -45,7 +45,7 @@ namespace esphome
       void dump_config() override;
       void setup() override;
 
-      SGReadyMode get_next_mode(PriceLevel price_level);
+      SGReadyMode get_next_mode(PriceLevel price_level, float temperature_sensor_value, unsigned long ms_since_last_change);
 
       SGReadyMode set_mode(SGReadyMode mode);
 

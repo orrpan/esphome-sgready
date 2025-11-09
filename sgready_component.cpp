@@ -13,11 +13,11 @@ namespace esphome
         namespace
         {
             constexpr int kAllowedBlockedTimesToday = 3;
-            constexpr int kAllowedBlockedTimeMin = 60;                       // minutes
-            constexpr int kAllowedBlockedTimeMax = 120;                      // minutes
+            constexpr int kAllowedBlockedOperationTimeMin = 60;              // minutes
+            constexpr int kAllowedBlockedOperationTimeMax = 120;             // minutes
             constexpr unsigned long kMinModeChangeMs = 10UL * 60UL * 1000UL; // 10 minutes
-            constexpr unsigned long kMaxBlockedModeMs = static_cast<unsigned long>(kAllowedBlockedTimeMax) * 60UL * 1000UL;
-            constexpr unsigned long kMinBlockedModeMs = static_cast<unsigned long>(kAllowedBlockedTimeMin) * 60UL * 1000UL;
+            constexpr unsigned long kMaxBlockedOperationModeMs = static_cast<unsigned long>(kAllowedBlockedOperationTimeMax) * 60UL * 1000UL;
+            constexpr unsigned long kMinBlockedOperationModeMs = static_cast<unsigned long>(kAllowedBlockedOperationTimeMin) * 60UL * 1000UL;
 
             // runtime state that is internal to this translation unit
             static unsigned long last_mode_change_ms = 0;
@@ -120,50 +120,27 @@ namespace esphome
                 current_mode = this->set_mode(SGReadyMode::NORMAL_OPERATION);
                 return;
             }
-            ESP_LOGD(TAG, "update(price=%d, temp=%.2f)", static_cast<int>(price_level), temperature_sensor_value);
-
             if (!this->pin_a_ || !this->pin_b_)
             {
                 ESP_LOGW(TAG, "Pins not configured; skipping update");
                 return;
             }
+
+            ESP_LOGD(TAG, "update(price=%d, temp=%.2f)", static_cast<int>(price_level), temperature_sensor_value);
+
             unsigned long now = millis();
             unsigned long ms_since_last_change = now - last_mode_change_ms;
-
-            SGReadyMode next_mode = this->get_next_mode(price_level);
 
             // prevent rapid mode toggles : enforce minimum time between changes
             if (now != 0 && ms_since_last_change < (kMinModeChangeMs - 1000UL))
             {
-                ESP_LOGW(TAG, "Mode change to %s suppressed: wait %lu ms more", mode_description(next_mode), kMinModeChangeMs - ms_since_last_change);
+                ESP_LOGW(TAG, "Mode change suppressed: wait %lu ms more", kMinModeChangeMs - ms_since_last_change);
                 return;
             }
 
-            // track blocked usage counters
-            if (current_mode == SGReadyMode::BLOCKED_OPERATION && next_mode != SGReadyMode::BLOCKED_OPERATION)
-            {
-                if (ms_since_last_change >= kMinBlockedModeMs)
-                {
-                    used_blocked_times_today++;
-                    ESP_LOGI(TAG, "Blocked session ended and lasted %lu ms, blocked %d times today", ms_since_last_change, used_blocked_times_today);
-                }
-                else
-                {
-                    ESP_LOGW(TAG, "Blocked session too short (%lu ms); not counting towards daily limit", ms_since_last_change);
-                    // do not count this towards the daily limit
-                    next_mode = SGReadyMode::BLOCKED_OPERATION;
-                }
-            }
-            else if (current_mode == SGReadyMode::BLOCKED_OPERATION && next_mode == SGReadyMode::BLOCKED_OPERATION)
-            {
-                if (ms_since_last_change >= kMaxBlockedModeMs)
-                {
-                    used_blocked_times_today++;
-                    ESP_LOGI(TAG, "Exiting BLOCKED_OPERATION mode due to max duration reached");
-                    next_mode = SGReadyMode::NORMAL_OPERATION;
-                }
-            }
-            else if (next_mode == current_mode)
+            SGReadyMode next_mode = this->get_next_mode(price_level, temperature_sensor_value, ms_since_last_change);
+
+            if (next_mode == current_mode)
             {
                 ESP_LOGD(TAG, "Mode unchanged (%s)", mode_description(current_mode));
                 return;
@@ -175,8 +152,14 @@ namespace esphome
         }
 
         // Determine next mode based on price level and availability
-        SGReadyMode SGReadyComponent::get_next_mode(PriceLevel price_level)
+        SGReadyMode SGReadyComponent::get_next_mode(PriceLevel price_level, float temperature_sensor_value, unsigned long ms_since_last_change)
         {
+            if (current_mode == SGReadyMode::BLOCKED_OPERATION && ms_since_last_change < kMinBlockedOperationModeMs)
+            {
+                ESP_LOGD(TAG, "Continuing in BLOCKED_OPERATION; minimum time not yet reached (%lu ms remaining)", kMinBlockedOperationModeMs - ms_since_last_change);
+                return SGReadyMode::BLOCKED_OPERATION;
+            }
+
             switch (price_level)
             {
             case PriceLevel::PRICE_LEVEL_VERY_LOW:
@@ -190,11 +173,40 @@ namespace esphome
             case PriceLevel::PRICE_LEVEL_NORMAL:
                 return SGReadyMode::NORMAL_OPERATION;
             case PriceLevel::PRICE_LEVEL_HIGH:
-                if ((used_blocked_times_today < kAllowedBlockedTimesToday) &&
-                    (last_temperature_ >= minimum_temperature_celsius))
-                    return SGReadyMode::BLOCKED_OPERATION;
-                else
+                if (temperature_sensor_value < minimum_temperature_celsius)
+                {
+                    ESP_LOGW(TAG, "High price level but temperature %.2fC below minimum %.2fC; NORMAL_OPERATION", temperature_sensor_value, minimum_temperature_celsius);
                     return SGReadyMode::NORMAL_OPERATION;
+                }
+
+                if (current_mode != SGReadyMode::BLOCKED_OPERATION)
+                {
+                    // only switch to BLOCKED_OPERATION if we have remaining blocked times today
+                    if (used_blocked_times_today < kAllowedBlockedTimesToday)
+                    {
+                        ESP_LOGI(TAG, "Switching to BLOCKED_OPERATION; used_blocked_times_today=%d", used_blocked_times_today);
+                        used_blocked_times_today++;
+                        return SGReadyMode::BLOCKED_OPERATION;
+                    }
+                    else
+                    {
+                        ESP_LOGW(TAG, "Maximum blocked operations reached today (%d); staying in NORMAL_OPERATION", used_blocked_times_today);
+                        return SGReadyMode::NORMAL_OPERATION;
+                    }
+                }
+                else
+                {
+                    if (ms_since_last_change >= kMaxBlockedOperationModeMs)
+                    {
+                        ESP_LOGI(TAG, "Maximum BLOCKED_OPERATION time exceeded; switching to NORMAL_OPERATION");
+                        return SGReadyMode::NORMAL_OPERATION;
+                    }
+                    else
+                    {
+                        ESP_LOGD(TAG, "Continuing in BLOCKED_OPERATION; time remaining %lu ms", kMaxBlockedOperationModeMs - ms_since_last_change);
+                        return SGReadyMode::BLOCKED_OPERATION;
+                    }
+                }
             default:
                 ESP_LOGW(TAG, "Unknown price level %d; defaulting to NORMAL_OPERATION", static_cast<int>(price_level));
                 return SGReadyMode::NORMAL_OPERATION;
